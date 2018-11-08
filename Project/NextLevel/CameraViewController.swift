@@ -161,11 +161,15 @@ class CameraViewController: UIViewController {
         
         // Configure NextLevel by modifying the configuration ivars
         let nextLevel = NextLevel.shared
+        nextLevel.captureMode = .metadataVideoWithoutAudio
+        nextLevel.metadataObjectTypes = [.face]
+        nextLevel.devicePosition = .front
         nextLevel.delegate = self
         nextLevel.deviceDelegate = self
         nextLevel.flashDelegate = self
         nextLevel.videoDelegate = self
         nextLevel.photoDelegate = self
+        nextLevel.metadataDelegate = self
         
         // video configuration
         nextLevel.videoConfiguration.preset = AVCaptureSession.Preset.hd1280x720
@@ -721,6 +725,13 @@ extension CameraViewController: NextLevelPhotoDelegate {
     func nextLevel(_ nextLevel: NextLevel, didFinishProcessingPhoto photo: AVCapturePhoto) {
     }
     
+}
+
+extension CameraViewController: NextLevelMetadataDelegate {
+    
+    func nextLevel(_ nextLevel: NextLevel, didOutput metadataObjects: [AVMetadataObject]) {
+        print("识别数量：\(metadataObjects.count)")
+    }
 }
 
 // MARK: - KVO

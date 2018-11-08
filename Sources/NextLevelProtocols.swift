@@ -166,6 +166,11 @@ public protocol NextLevelVideoDelegate: AnyObject {
     
 }
 
+// MARK: - 🔥NextLevelMetadataDelegate🔥
+public protocol NextLevelMetadataDelegate: AnyObject {
+    func nextLevel(_ nextLevel: NextLevel, didOutput metadataObjects: [AVMetadataObject])
+}
+
 // MARK: - NextLevelPhotoDelegate
 
 /// Photo delegate, provides updates on photo related capture functionality.

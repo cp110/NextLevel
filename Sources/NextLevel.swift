@@ -116,6 +116,7 @@ public enum NextLevelCaptureMode: Int, CustomStringConvertible {
     case photo
     case audio
     case videoWithoutAudio
+    case metadataVideoWithoutAudio
     case movie
     case arKit
     
@@ -126,6 +127,8 @@ public enum NextLevelCaptureMode: Int, CustomStringConvertible {
                 return "Video"
             case .videoWithoutAudio:
                 return "Video without audio"
+            case .metadataVideoWithoutAudio:
+                return "Metadata Video without audio"
             case .photo:
                 return "Photo"
             case .audio:
@@ -227,6 +230,7 @@ public class NextLevel: NSObject {
     public weak var flashDelegate: NextLevelFlashAndTorchDelegate?
     public weak var videoDelegate: NextLevelVideoDelegate?
     public weak var photoDelegate: NextLevelPhotoDelegate?
+    public weak var metadataDelegate: NextLevelMetadataDelegate?
     #if USE_TRUE_DEPTH
     public weak var depthDataDelegate: NextLevelDepthDataDelegate?
     #endif
@@ -255,6 +259,8 @@ public class NextLevel: NSObject {
             return self._arConfiguration as? NextLevelARConfiguration
         }
     }
+    
+    public var metadataObjectTypes: [AVMetadataObject.ObjectType] = [.face]
     
     // audio configuration
     
@@ -398,6 +404,7 @@ public class NextLevel: NSObject {
     internal var _audioOutput: AVCaptureAudioDataOutput?
     internal var _movieFileOutput: AVCaptureMovieFileOutput?
     internal var _photoOutput: AVCapturePhotoOutput?
+    internal var _metadataOutput: AVCaptureMetadataOutput?
     #if USE_TRUE_DEPTH
     internal var _depthDataOutput: Any?
     @available(iOS 11.0, *)
@@ -461,6 +468,7 @@ public class NextLevel: NSObject {
         self.flashDelegate = nil
         self.videoDelegate = nil
         self.photoDelegate = nil
+        self.metadataDelegate = nil
         #if USE_TRUE_DEPTH
         self.depthDataDelegate = nil
         #endif
@@ -526,7 +534,7 @@ extension NextLevel {
         switch self.captureMode {
         case .audio:
             return self.authorizationStatus(forMediaType: AVMediaType.audio)
-        case .videoWithoutAudio:
+        case .videoWithoutAudio, .metadataVideoWithoutAudio:
             return self.authorizationStatus(forMediaType: AVMediaType.video)
         case .arKit:
             fallthrough
@@ -723,7 +731,7 @@ extension NextLevel {
             shouldConfigureVideo = true
             shouldConfigureAudio = true
             break
-        case .videoWithoutAudio:
+        case .videoWithoutAudio, .metadataVideoWithoutAudio:
             shouldConfigureVideo = true
             break
         case .movie:
@@ -766,6 +774,10 @@ extension NextLevel {
                     }
                 }
             }
+            
+            if self.captureMode == .metadataVideoWithoutAudio {
+                self._metadataOutput?.metadataObjectTypes = metadataObjectTypes.filter { return _metadataOutput?.availableMetadataObjectTypes.contains($0) ?? false }
+            }
         }
         
         if shouldConfigureAudio {
@@ -803,7 +815,7 @@ extension NextLevel {
         switch self.captureMode {
         case .video:
             fallthrough
-        case .videoWithoutAudio:
+        case .videoWithoutAudio, .metadataVideoWithoutAudio:
             if session.sessionPreset != self.videoConfiguration.preset {
                 if session.canSetSessionPreset(self.videoConfiguration.preset) {
                     session.sessionPreset = self.videoConfiguration.preset
@@ -816,6 +828,9 @@ extension NextLevel {
                 let _ = self.addAudioOuput()
             }
             let _ = self.addVideoOutput()
+            if self.captureMode == .metadataVideoWithoutAudio {
+                let _ = self.addMetadataOutput()
+            }
             #if USE_TRUE_DEPTH
             if self.depthDataCaptureEnabled {
                 let _ = self.addDepthDataOutput()
@@ -987,6 +1002,23 @@ extension NextLevel {
         
     }
     
+    private func addMetadataOutput() -> Bool {
+        
+        if self._metadataOutput == nil {
+            self._metadataOutput = AVCaptureMetadataOutput()
+        }
+        
+        if let session = self._captureSession, let metadataOutput = self._metadataOutput {
+            if session.canAddOutput(metadataOutput) {
+                session.addOutput(metadataOutput)
+                metadataOutput.setMetadataObjectsDelegate(self, queue: self._sessionQueue)
+                return true
+            }
+        }
+        print("NextLevel, couldn't add metadata output to session")
+        return false
+    }
+    
     private func addAudioOuput() -> Bool {
         
         if self._audioOutput == nil {
@@ -1117,6 +1149,7 @@ extension NextLevel {
         self._audioInput = nil
         self._photoOutput = nil
         self._movieFileOutput = nil
+        self._metadataOutput = nil
         #if USE_TRUE_DEPTH
         self._depthDataOutput = nil
         #endif
@@ -1130,7 +1163,7 @@ extension NextLevel {
                 self._photoOutput = nil
             }
             break
-        case .videoWithoutAudio:
+        case .videoWithoutAudio, .metadataVideoWithoutAudio:
             if let photoOutput = self._photoOutput, session.outputs.contains(photoOutput) {
                 session.removeOutput(photoOutput)
                 self._photoOutput = nil
@@ -2703,6 +2736,14 @@ extension NextLevel: AVCaptureVideoDataOutputSampleBufferDelegate, AVCaptureAudi
         }
     }
     
+}
+
+// MARK: - 🔥AVCaptureMetadataOutputObjectsDelegate🔥
+extension NextLevel: AVCaptureMetadataOutputObjectsDelegate {
+    
+    public func metadataOutput(_ output: AVCaptureMetadataOutput, didOutput metadataObjects: [AVMetadataObject], from connection: AVCaptureConnection) {
+        metadataDelegate?.nextLevel(self, didOutput: metadataObjects)
+    }
 }
 
 // MARK: - AVCaptureFileOutputDelegate
